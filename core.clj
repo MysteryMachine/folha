@@ -267,10 +267,30 @@
 ;; Arcadia State
 (defn state-component [obj] (the obj ArcadiaState))
 (defn state  [obj] (if-let [state-comp (state-component obj)]
-                     (.state state-comp)
-                     {}))
+                     (.state state-comp)))
 (defn state! [obj arg] (set! (.state (the obj ArcadiaState)) arg))
 (defn swat! [obj fun]
   (let [st (the obj ArcadiaState)]
     (set! (.state st) (fun (.state st)))))
+
+;; MACROZ
+
+(defn hook-expand [prefab]
+  (fn [[hook-name fun]]
+    `(let [c# (add-component ~prefab ~hook-name)]
+       (set! (.fn c#) ~fun))))
+
+(defmacro +state [prefab & hooks]
+  (concat
+   `(let [prefab# ~prefab]
+      (when-not (state prefab#)
+        (add-component prefab# ArcadiaState)))
+   (map (hook-expand prefab) hooks)))
+
+; Lazily only loading these for now. Add all later
+; When not a on a deadline
+(defmacro load-hooks []
+  `(import ArcadiaState
+           StartHook
+           UpdateHook))
 
