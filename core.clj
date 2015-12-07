@@ -190,11 +190,9 @@
 (defn sync-agent-velocity!
   "Update hook meant for syncing a velocity field in an animtor
   to a NavMeshAgent's velocity on or inside a GameObject."
-  [this]
-  (anim-set*!
-   this
-   "velocity"
-   (mag (.velocity (nav-mesh-agent* this)))))
+  [this state]
+  (anim-set*! this "velocity" (mag (.velocity (nav-mesh-agent* this))))
+  state)
 
 ;; Mouse
 
@@ -285,7 +283,7 @@
 
 ;; Arcadia State
 (defn state-component [obj] (the obj ArcadiaState))
-(defn state  [obj] (if-let [state-comp (state-component obj)]
+(defn ->state  [obj] (if-let [state-comp (state-component obj)]
                      (.state state-comp)))
 (defn state! [obj arg] (set! (.state (the obj ArcadiaState)) arg))
 (defn swat! [obj fun]
@@ -297,18 +295,23 @@
 (defn hook-expand [prefab decl]
   (let [hook-name (first decl)
         args (second decl)
+        this (first args)
+        state (second args)
         body (drop 2 decl)]
     `(let [c# (add-component ~prefab ~hook-name)]
-       (set! (.fn c#) (fn [~@args] ~@body)))))
+       (set! (.fn c#)
+             (fn [~this]
+               (let [~state (->state ~this)]
+                 (state! ~this (do ~@body))))))))
 
 (defmacro +state [prefab & hooks]
   (let [sym (gensym)]
     `(let [~sym ~prefab]
-       (when-not (state ~sym)
+       (when-not (->state ~sym)
          (add-component ~sym ArcadiaState))
        ~@(map (fn [hook] (hook-expand sym hook)) hooks))))
 
- 
+
 ; Lazily only loading these for now. Add all later
 ; When not a on a deadline
 (defmacro load-hooks []
