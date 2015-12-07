@@ -133,6 +133,25 @@
 (defn forward [obj] (.forward (the obj Transform)))
 
 (defn position ^Vector3 [obj] (.position (transform obj)))
+(defn position!
+  ([obj ^Vector3 v] (set! (.position (transform obj)) v))
+  ([obj x y z] (set! (.position (transform obj)) (v3 x y z))))
+
+(defn local-position ^Vector3 [obj] (.localPosition (transform obj)))
+(defn local-position!
+  ([obj ^Vector3 v] (set! (.localPosition (transform obj)) v))
+  ([obj x y z] (set! (.localPosition (transform obj)) (v3 x y z))))
+
+(defn rotation ^Quaternion [obj] (.rotation (transform obj)))
+(defn rotation!
+  ([obj q] (set! (.rotation (transform obj)) q))
+  ([obj x y z a] (set! (.rotation (transform obj)) (q4 x y z a))))
+
+(defn scale ^Vector3 [obj] (.localScale (transform obj)))
+(defn scale!
+  ([obj ^Vector3 v] (set! (.localScale (transform obj)) v))
+  ([obj x y z] (set! (.localScale (transform obj)) (v3 x y z))))
+
 (defn dist [a b] (Vector3/Distance (position a) (position b)))
 
 ;; Nav Mesh Agent
@@ -275,18 +294,21 @@
 
 ;; MACROZ
 
-(defn hook-expand [prefab]
-  (fn [[hook-name fun]]
+(defn hook-expand [prefab decl]
+  (let [hook-name (first decl)
+        args (second decl)
+        body (drop 2 decl)]
     `(let [c# (add-component ~prefab ~hook-name)]
-       (set! (.fn c#) ~fun))))
+       (set! (.fn c#) (fn [~@args] ~@body)))))
 
 (defmacro +state [prefab & hooks]
-  (concat
-   `(let [prefab# ~prefab]
-      (when-not (state prefab#)
-        (add-component prefab# ArcadiaState)))
-   (map (hook-expand prefab) hooks)))
+  (let [sym (gensym)]
+    `(let [~sym ~prefab]
+       (when-not (state ~sym)
+         (add-component ~sym ArcadiaState))
+       ~@(map (fn [hook] (hook-expand sym hook)) hooks))))
 
+ 
 ; Lazily only loading these for now. Add all later
 ; When not a on a deadline
 (defmacro load-hooks []
