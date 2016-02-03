@@ -9,7 +9,10 @@
     Vector2      Camera
     Resources    Quaternion
     GameObject   Screen
-    Rigidbody    Rect]
+    Rigidbody    Rect
+    Mathf TextureFormat
+    Texture2D    Color
+    QueryTriggerInteraction]
    ArcadiaState))
 
 ;; Logging
@@ -34,7 +37,7 @@
 (defn transform [obj] (the obj Transform))
 
 (defn parent [obj] (.parent (transform obj)))
-(defn parent? [obj par] (= (parent obj) (transform par)))
+(defn parent? [par obj] (= (parent obj) (transform par)))
 (defn parent! [obj par]
   (set! (.parent (the obj Transform)) (the par Transform)))
 
@@ -65,6 +68,11 @@
 ;; Greater of and Lesser of
 (defn <of [a b] (if (< a b) a b))
 (defn >of [a b] (if (> a b) a b))
+
+;; Math
+
+(defn sqrt [n] (Mathf/Sqrt n))
+(defn ceil [n] (Mathf/Ceil n))
 
 ;; Vector
 (defn v2 [x y] (Vector2. x y))
@@ -120,6 +128,11 @@
 (defn v3->v2 [v]
   (v2 (.x v) (.y v)))
 
+(defn v2->clj [v] {:x (.x v) :y (.y v)})
+(defn v3->clj [v] {:x (.x v) :y (.y v) :z (.z v)})
+(defn clj->v2 [v] (v2 (:x v) (:y v)))
+(defn clj->v3 [v] (v3 (:x v) (:y v) (:z v)))
+
 (defn q4
   (^Quaternion [[x y z a]] (Quaternion. x y z a))
   (^Quaternion [x y z a] (Quaternion. x y z a)))
@@ -153,6 +166,10 @@
   ([obj x y z] (set! (.localScale (transform obj)) (v3 x y z))))
 
 (defn dist [a b] (Vector3/Distance (position a) (position b)))
+
+;; Color
+
+(defn color [r g b a] (Color. r g b a))
 
 ;; Nav Mesh Agent
 (defn nav-mesh-agent ^NavMeshAgent [obj] (the obj NavMeshAgent))
@@ -224,12 +241,28 @@
   (.ScreenPointToViewportPoint (main-camera) (mouse-pos)))
 ;; Raycasting
 
-(defn scrnpt->ray  [camera pt] (.ScreenPointToRay camera pt))
-(defn mouse->ray [] ^Ray (scrnpt->ray (main-camera) (mouse-pos)))
+(defn world->scrnpt
+  ([camera pt] (.WorldToScreenPoint camera pt))
+  ([pt] (world->scrnpt (main-camera) pt)))
+(defn obj->scrnpt
+  ([camera obj] (world->scrnpt camera (position obj)))
+  ([obj] (world->scrnpt (position obj))))
+(defn scrnpt->ray
+  ([camera pt] (.ScreenPointToRay camera pt))
+  ([pt] (.ScreenPointToRay (main-camera) pt)))
+
+(defn mouse->ray
+  ([camera] ^Ray (scrnpt->ray camera (mouse-pos)))
+  ([] ^Ray (scrnpt->ray (main-camera) (mouse-pos))))
 
 (defn ray->direction [^Ray ray] (.direction ray))
 
-(defn raycast [^Ray ray] (Physics/RaycastAll ray))
+(defn raycast [^Ray ray &
+               {:keys [max-distance layer-mask query-trigger-interaction]
+                :or {max-distance Mathf/Infinity
+                     layer-mask Physics/DefaultRaycastLayers
+                     query-trigger-interaction QueryTriggerInteraction/UseGlobal}}]
+  (Physics/RaycastAll ray max-distance layer-mask query-trigger-interaction))
 (defn sweep [obj v] (.SweepTestAll (the obj Rigidbody) v))
 (defn boxcast
   ([worldpt size] (boxcast worldpt size identity))
@@ -251,17 +284,29 @@
               (op go))))
         (vec swept))))))
 
+;; TODO: This function seems to be doing too much, break up in the future
 (defn mouse->hit
   ([] (mouse->hit (fn [_] true) (fn [_] false)))
   ([obj-filter] (mouse->hit obj-filter (fn [_] false)))
-  ([obj-filter point-filter]
-   (let [hit (first (raycast (mouse->ray)))]
+  ([obj-filter point-filter &
+    ;; Uh, figure out a way to avoid unneccesary duplication
+    {:keys [max-distance layer-mask query-trigger-interaction]
+     :or [max-distance Mathf/Infinity
+          layer-mask Physics/DefaultRaycastLayers
+          query-trigger-interaction QueryTriggerInteraction/UseGlobal]}]
+   (let [hit (first (raycast (mouse->ray) :layer-mask layer-mask))]
      (when hit
        (let [go   (->go (.transform hit))]
          (cond
            (obj-filter go) go
            (point-filter go) (.point hit)
            :else nil))))))
+
+;; Textures
+
+(defn texture [x y & {:keys [format mipmap]
+                      :or {format TextureFormat/RGBA32 mipmap false}}]
+  (Texture2D. x y format mipmap))
 
 ;; Prefab
 (defn clone!
