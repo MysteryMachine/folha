@@ -291,9 +291,9 @@
   ([obj-filter point-filter &
     ;; Uh, figure out a way to avoid unneccesary duplication
     {:keys [max-distance layer-mask query-trigger-interaction]
-     :or [max-distance Mathf/Infinity
+     :or {max-distance Mathf/Infinity
           layer-mask Physics/DefaultRaycastLayers
-          query-trigger-interaction QueryTriggerInteraction/UseGlobal]}]
+          query-trigger-interaction QueryTriggerInteraction/UseGlobal}}]
    (let [hit (first (raycast (mouse->ray) :layer-mask layer-mask))]
      (when hit
        (let [go   (->go (.transform hit))]
