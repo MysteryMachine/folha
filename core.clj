@@ -12,7 +12,8 @@
     Rigidbody    Rect
     Mathf TextureFormat
     Texture2D    Color
-    QueryTriggerInteraction]
+    QueryTriggerInteraction
+    PlayerPrefs Application]
    ArcadiaState))
 
 ;; Logging
@@ -325,6 +326,27 @@
    (clone! (Resources/Load name) pos (q4 0 0 0 1)))
   ([^String name  ^Vector3 pos ^Quaternion rot]
    (clone! (Resources/Load name) pos rot)))
+
+;; PlayerPrefs
+
+(defn save!
+  ([m]
+   (doseq [[k v] m]
+     (PlayerPrefs/SetString (str k) (str v))))
+  ([k1 v1 & {:as opts}]
+   (let [kvs (assoc opts k1 v1)]
+     (doseq [[k v] kvs]
+       (PlayerPrefs/SetString (str k) (str v))))))
+
+(defn load! [reader & ks]
+  (into {}
+        (for [k ks]
+          [k (reader (PlayerPrefs/GetString (str k)))])))
+
+;; Load Scene
+
+(defn quit! [] (Application/Quit))
+(defn load-scene! [i] (Application/LoadLevel i))
 
 ;; Arcadia State
 (defn state-component [obj] (the obj ArcadiaState))
