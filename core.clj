@@ -17,11 +17,26 @@
    ArcadiaState))
 
 ;; Logging
-(defn log [msg] (Debug/Log (str msg)))
+(defn log
+  "* [msg]
+     Shortcut for logging in Unity. Check your Unity console.
+     - `msg` : Whatever it is you'd like to log."
+  [msg]
+  (Debug/Log (str msg)))
 
-;; Accessing Object
+;; Accessing Objects
 (defn the
-  "For accessing an object based on a name and component"
+  "* [arg]
+     Used for accessing objects in the Unity graph using just their
+     name. If a string is not passed in, it will just return the
+     object passed in. This behavior exists in order to faciliate
+     library functionality. Most fns in folha can take a string or
+     a Unity object.
+     - `arg` : a string or a Unity object
+   * [obj component]
+     Like above, but also reaches into the object to get a component.
+     - `obj` : a string or a Unity object
+     - `component` : name (string or type) of a component"
   ([arg] (if (string? arg) (object-named arg) arg))
   ([obj component]
    (if-let [go (the obj)]
@@ -29,11 +44,26 @@
      nil)))
 
 (defn the*
+  "* [obj component]
+     Like `the`, but searches for the component in children as well.
+     - `obj` : a string or a Unity object
+     - `component` : name (string or type) of a component"
   [obj component]
   (.GetComponentInChildren (the obj) component))
 
-(defn go? [obj] (= GameObject (type obj)))
-(defn ->go [obj] (.gameObject obj))
+(defn go?
+  "* [obj]
+     Returns true if `obj` is a GameObject and false otherwise.
+     - `obj` : Anything"
+  [obj]
+  (= GameObject (type obj)))
+
+(defn ->go
+  "* [obj]
+     Returns the GameObject associate with `obj`
+     - `obj` : A Unity component"
+  [obj]
+  (.gameObject obj))
 
 (defn transform [obj] (the obj Transform))
 
@@ -330,36 +360,75 @@
 ;; PlayerPrefs
 
 (defn save!
-  ([m]
+  ([str-fn m]
    (doseq [[k v] m]
-     (PlayerPrefs/SetString (str k) (str v))))
-  ([k1 v1 & {:as opts}]
+     (PlayerPrefs/SetString (str-fn k) (str-fn v))))
+  ([str-fn k1 v1 & {:as opts}]
    (let [kvs (assoc opts k1 v1)]
      (doseq [[k v] kvs]
-       (PlayerPrefs/SetString (str k) (str v))))))
+       (PlayerPrefs/SetString (str-fn k) (str-fn v))))))
 
-(defn load! [reader & ks]
-  (into {}
-        (for [k ks]
-          [k (reader (PlayerPrefs/GetString (str k)))])))
+(defn load!
+  ([reader & ks]
+   (if (and (= 1  (count ks))
+            (seq? (first ks)))
+     (into {}
+           (for [k (first ks)]
+             [k (reader (PlayerPrefs/GetString (str k)))]))
+     (load! reader ks))))
 
 ;; Load Scene
 
-(defn quit! [] (Application/Quit))
-(defn load-scene! [i] (Application/LoadLevel i))
+(defn quit!
+  "* []
+     Calls Application/Quit"
+  []
+  (Application/Quit))
+
+(defn load-scene!
+  "* [i]
+     Loads a scene
+     - `i` : an integer"
+  [i]
+  (Application/LoadLevel i))
 
 ;; Arcadia State
-(defn state-component [obj] (the obj ArcadiaState))
-(defn ->state  [obj] (if-let [state-comp (state-component obj)]
-                     (.state state-comp)))
-(defn state! [obj arg] (set! (.state (the obj ArcadiaState)) arg))
-(defn swat! [obj fun]
+(defn state-component
+  "* [obj]
+     Accesses the ArcadiaState of an Object.
+     - `obj` : A Unity object with an ArcadiaState component."
+  [obj]
+  (the obj ArcadiaState))
+
+(defn ->state [obj]
+  "* [obj]
+     Accesses the ArcadiaState.state of an Object.
+     - `obj` : A Unity object with an ArcadiaState component."
+  (if-let [state-comp (state-component obj)]
+    (.state state-comp)))
+
+(defn state!
+  "* [obj arg]
+     Like `reset!` for ArcadiaState. Should throw an error
+     if the object does not contain such a state.
+     - `obj` : A Unity object with an ArcadiaState component.
+     - `arg` : The new value of your ArcadiaState"
+  [obj arg]
+  (set! (.state (the obj ArcadiaState)) arg))
+
+(defn swat!
+  "* [obj fun]
+     Like `swap!` for ArcadiaState. Should throw an error
+     if the object does not contain such a state.
+     - `obj` : A Unity object with an ArcadiaState component.
+     - `fun` : A function with one argument. Will be called with
+       the current ArcadiaState state, and its return value will
+       set the new ArcadiaState."
+  [obj fun]
   (let [st (the obj ArcadiaState)]
     (set! (.state st) (fun (.state st)))))
 
-;; MACROZ
-
-(defn hook-expand [prefab decl]
+(defn- hook-expand [prefab decl]
   (let [hook-name (first decl)
         args (second decl)
         this (first args)
@@ -371,17 +440,32 @@
                (let [~state (->state ~this)]
                  (state! ~this (do ~@body))))))))
 
-(defmacro +state [prefab & hooks]
+(defmacro +state
+  "* [prefab & hooks]
+     Takes a prefab and a set of hooks, and adds those hooks
+     to that prefab. Use with load-hooks to avoid compile time
+     errors, or import the required hooks by hand.
+     - `prefab` : A Unity object
+     - `hooks`  : A hook consists of a hook name; argument list
+       (which itself can consist of a `this` which refers to the
+       Unity object and a `state`, which refers to the ArcadiaState
+       on the object; and a body, whose return will be automatically
+       set as the new ArcadiaState.
+   Example
+   (+state prefab
+     (UpdateHook [this state] (sync-agent-velocity! this state))
+     (UpdateHook [this state] (e/update! this state)))"
+  [prefab & hooks]
   (let [sym (gensym)]
     `(let [~sym ~prefab]
        (when-not (->state ~sym)
          (add-component ~sym ArcadiaState))
        ~@(map (fn [hook] (hook-expand sym hook)) hooks))))
 
-
-; Lazily only loading these for now. Add all later
-; When not a on a deadline
-(defmacro load-hooks []
+(defmacro load-hooks
+  "* []
+     Loads some of the simplest hooks used in Arcadia's component library."
+  []
   `(import ArcadiaState
            StartHook
            UpdateHook))
