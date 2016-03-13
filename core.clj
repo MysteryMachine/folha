@@ -400,10 +400,11 @@
   [obj]
   (the obj ArcadiaState))
 
-(defn ->state [obj]
+(defn ->state
   "* [obj]
      Accesses the ArcadiaState.state of an Object.
      - `obj` : A Unity object with an ArcadiaState component."
+  [obj]
   (if-let [state-comp (state-component obj)]
     (.state state-comp)))
 
