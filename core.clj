@@ -1,5 +1,7 @@
 (ns folha.core
   (:use arcadia.core)
+  (:require [clojure.data :refer [diff]]
+            [clojure.edn :as edn])
   (:import
    [UnityEngine  Vector3
     NavMeshAgent Animator
@@ -360,6 +362,14 @@
 ;; PlayerPrefs
 
 (defn save!
+  "* [str-fn m]
+     Saves a map to PlayerPrefs.
+     `str-fn` : A stringifying function. If your game only
+     uses a singular way of stringifying, consider creating
+     a partial function to promote reuse.
+     `m` : a map or a sequence of key value pairs. Saves
+      each key to its own PlayerPref, but is shallow, so
+      nested maps all get saved to the same PlayerPref."
   ([str-fn m]
    (doseq [[k v] m]
      (PlayerPrefs/SetString (str-fn k) (str-fn v))))
@@ -369,16 +379,31 @@
        (PlayerPrefs/SetString (str-fn k) (str-fn v))))))
 
 (defn load!
+  "* [reader & ks]
+     Reads data from PlayerPrefs.
+     - `reader` : A reader function, usually one that calls
+       clojure.edn/read-string with a map of readers. If you
+       only ever use one reader, you can define a partial function
+       where this reader is always included to save repitition.
+     - `ks` : can either be multiple arguments in the form of
+       (load! :a :b :c) or as one singular list in the form off
+       (load [:a :b :c]). These represent string keys to be
+       read off of player preferences
+     WARNING: behavior is undefined for things that are not
+     keywords and strings."
   ([reader & ks]
-   (if (and (= 1  (count ks))
-            (seq? (first ks)))
-     (into {}
-           (for [k (first ks)]
-             [k (reader (PlayerPrefs/GetString (str k)))]))
-     (load! reader ks))))
+   (into {}
+         (for [k (flatten ks)]
+           [k (reader (PlayerPrefs/GetString (str k)))]))))
+
+(defn delete-pref
+  "* [k]
+     Deletes a PlayerPref key.
+     - `k` : key"
+  [k]
+  (PlayerPrefs/DeleteKey (str k)))
 
 ;; Load Scene
-
 (defn quit!
   "* []
      Calls Application/Quit"
@@ -429,6 +454,17 @@
   (let [st (the obj ArcadiaState)]
     (set! (.state st) (fun (.state st)))))
 
+(defn merge!
+  "* [obj m]
+     Merges in a map into the state of an object with an
+     ArcadiaState.
+     - `obj` : A Unity handle with an ArcadiaState component
+     - `m` : The map to be merged in
+     -> The merged state."
+  [obj m]
+  (swat! obj #(merge % m))
+  (->state obj))
+
 (defn- hook-expand [prefab decl]
   (let [hook-name (first decl)
         args (second decl)
@@ -471,3 +507,85 @@
            StartHook
            UpdateHook))
 
+;; Caching & Functional State
+
+(defn cached-load!
+  "* [reader object & ks]
+     Checks the Arcadia state of object for a set of keys.
+     If the keys are not contained in the state, it reads
+     data from PlayerPrefs.
+     - `reader` : A reader function, usually one that calls
+       clojure.edn/read-string with a map of readers. If you
+       only ever use one reader, you can define a partial function
+       where this reader is always included to save repitition.
+     - `object` : A string or unity object with an ArcadiaState
+       component attached. All data will be saved here. As with the
+       reader above, use a partial if this is always the same object.
+     - `ks` : can either be multiple arguments in the form of
+       (cached-load! :a :b :c) or as one singular list in the form off
+       (cached-load [:a :b :c]). These represent string keys to be
+       read off of player preferences"
+  [reader object & ks]
+  (let [this (the object)
+        state (->state this)
+        fks (flatten (seq ks))
+        state-ks-set (set (keys state))
+        req-ks-set (set fks)
+        [new-ks _ rest-ks] (diff req-ks-set state-ks-set)
+        old-data (select-keys state rest-ks)]
+    (if new-ks
+      (let [new-data (load! reader (vec new-ks))]
+        (merge! this new-data)
+        (merge old-data new-data))
+      old-data)))
+
+(defn all-snaps
+  "* []
+     Returns all snapshot ids."
+  []
+  (or (load! edn/read-string [:folha/snapshots])
+      []))
+
+(defn snapshot!
+  "* [str-fn o]
+     A function meant for debugging and/or the REPL.
+     Snapshots the Arcadia of an object to promote debugging.
+     Only useful if your scene is set to be a function of your
+     state.
+     * `str-fn` : A stringifying function. If your game only
+     uses a singular way of stringifying, consider creating
+     a partial function to promote reuse.
+     * `o` : A Unity object (or its name) with an ArcadiaState component."
+  [str-fn o]
+  (let [id (str "ID::" System.DateTime/Now)
+        snaps (all-snaps)]
+    (save! str-fn {id (->state o)})
+    (save! str (vec (conj all-snaps id)))
+    id))
+
+(defn load-snap!
+  "* [reader object]
+     Load the last snapshot taken.
+     - `reader` : A reader function, usually one that calls
+       clojure.edn/read-string with a map of readers. If you
+       only ever use one reader, you can define a partial function
+       where this reader is always included to save repitition.
+     - `object` : A string or unity object with an ArcadiaState
+       component attached. All data will be saved here. As with the
+       reader above, use a partial if this is always the same object.
+   * [reader object id]
+     Loads the snapshot with this id.
+     - `reader` : see above
+     - `object` : see above
+     - `id` : the snapshot id"
+  ([reader object]
+   (load-snap! reader object (last (all-snaps))))
+  ([reader object id]
+   (state! object (load! reader [id]))))
+
+(defn clear-snaps
+  "[]
+   Deletes all snapshots."
+  []
+  (doseq [id (all-snaps)]
+   (delete-pref id)))
