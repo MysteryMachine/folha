@@ -620,3 +620,39 @@
      (~'def ~'swap!!  (partial swap!! name#))
      (~'def ~'merge! (partial merge! name#))
      (~'defn ~'this [] (->state (the name#)))))
+
+(defn- protocol-transform [pname api-fns]
+  `(defprotocol ~pname
+     ~@(map #(list (first %) (second %)) api-fns)))
+
+(defn- component-transform [name pname api-fns]
+  `(defcomponent ~name []
+     ~pname
+     ~@api-fns))
+
+(defmacro defapi
+  "Generates a Unity component with method you define
+   yourself. Arcadia's hooks are not enough for every
+   single situation. This allows you to call functions
+   from buttons or from the animator.
+
+   - Example Usage
+   (defapi StartMenu
+    (NewGame [this]
+      (save-party! (random-party))
+      (curtains! :cutscene :intro))
+    (LoadGame [this]
+      (curtains!))
+    (Exit [this]
+      (quit!)))
+
+   * [name & api-fns]
+     `name` : the name of your Unity component
+     `api-fns` : functions in the form of
+      (FnName [this] body) where FnName is the
+      method name of your function."
+  [name & api-fns]
+  (let [pname (symbol (str "I" name))]
+   `(do
+      ~(protocol-transform   pname api-fns)
+      ~(component-transform  name pname api-fns))))
