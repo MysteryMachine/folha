@@ -89,15 +89,6 @@
 
 (defn ->name ^String [obj] (.name obj))
 
-;; Id
-(defonce ^:private ids   (atom {}))
-
-(defn ->id [obj] (.GetInstanceID (->go (the obj))))
-(defn register-id! [obj]
-  (reset! ids (assoc @ids (->id obj) obj))
-  obj)
-(defn ->obj [id] (get @ids id))
-
 ;; Greater of and Lesser of
 (defn <of [a b] (if (< a b) a b))
 (defn >of [a b] (if (> a b) a b))
@@ -216,7 +207,7 @@
   ([obj x y z] (move! obj (v3 x y z))))
 
 ;; Animator
-(defn animator  ^Animator [obj] (the obj Animator))
+(defn animator  ^Animator [obj] (the obj Animator)) 
 (defn animator* ^Animator [obj] (the* obj Animator))
 
 ;; Look into maybe using a macro to define all these
@@ -433,7 +424,7 @@
   (if-let [state-comp (state-component obj)]
     (.state state-comp)))
 
-(defn state!
+(defn reset!!
   "* [obj arg]
      Like `reset!` for ArcadiaState. Should throw an error
      if the object does not contain such a state.
@@ -442,7 +433,7 @@
   [obj arg]
   (set! (.state (the obj ArcadiaState)) arg))
 
-(defn swat!
+(defn swap!!
   "* [obj fun]
      Like `swap!` for ArcadiaState. Should throw an error
      if the object does not contain such a state.
@@ -462,7 +453,7 @@
      - `m` : The map to be merged in
      -> The merged state."
   [obj m]
-  (swat! obj #(merge % m))
+  (swap!! obj #(merge % m))
   (->state obj))
 
 (defmacro defhook
@@ -478,7 +469,7 @@
   [name [this state] & body]
   `(defn ~name [~this]
      (let [~state (->state ~this)]
-       (state! ~this (do ~@body)))))
+       (reset!! ~this (do ~@body)))))
 
 (defn- hook-expand [prefab decl]
   (let [hook-name (first decl)
@@ -490,7 +481,7 @@
        (set! (.fn c#)
              (fn [~this]
                (let [~state (->state ~this)]
-                 (state! ~this (do ~@body))))))))
+                 (reset!! ~this (do ~@body))))))))
 
 (defmacro +state
   "Deprecated, as of March 20, 2016, works, but is no longer
@@ -600,7 +591,7 @@
   ([reader object]
    (load-snap! reader object (last (all-snaps))))
   ([reader object id]
-   (state! object (load! reader [id]))))
+   (reset!! object (load! reader [id]))))
 
 (defn clear-snaps
   "[]
@@ -625,7 +616,7 @@
          reader# ~reader]
      (~'def ~'load!  (partial load! reader#))
      (~'def ~'read!  (partial cached-load! reader# name#))
-     (~'def ~'state! (partial state! name#))
-     (~'def ~'swat!  (partial swat! name#))
+     (~'def ~'reset!! (partial reset!! name#))
+     (~'def ~'swap!!  (partial swap!! name#))
      (~'def ~'merge! (partial merge! name#))
      (~'defn ~'this [] (->state (the name#)))))
