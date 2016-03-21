@@ -465,6 +465,21 @@
   (swat! obj #(merge % m))
   (->state obj))
 
+(defmacro defhook
+  "[name [this state] & body]
+   Defines a function to be used as a hook for an object with
+   an ArcadiaState component. The return value of this function
+   will be the new state of the object.
+   - `name` : The name of the created function
+   - `this` : The symbol to which the GameObject will be bound to
+   - `state`: The symbol to which the GameObject's ArcadiaState.state
+     will be bound to.
+   - `body` : The body of the function"
+  [name [this state] & body]
+  `(defn ~name [~this]
+     (let [~state (->state ~this)]
+       (state! ~this (do ~@body)))))
+
 (defn- hook-expand [prefab decl]
   (let [hook-name (first decl)
         args (second decl)
@@ -478,7 +493,9 @@
                  (state! ~this (do ~@body))))))))
 
 (defmacro +state
-  "* [prefab & hooks]
+  "Deprecated, as of March 20, 2016, works, but is no longer
+   part of the core design of folha
+   * [prefab & hooks]
      Takes a prefab and a set of hooks, and adds those hooks
      to that prefab. Use with load-hooks to avoid compile time
      errors, or import the required hooks by hand.
@@ -500,7 +517,9 @@
        ~@(map (fn [hook] (hook-expand sym hook)) hooks))))
 
 (defmacro load-hooks
-  "* []
+  "Deprecated, as of March 20, 2016, works, but is no longer
+   part of the core design of folha
+   * []
      Loads some of the simplest hooks used in Arcadia's component library."
   []
   `(import ArcadiaState
@@ -589,3 +608,24 @@
   []
   (doseq [id (all-snaps)]
    (delete-pref id)))
+
+(defmacro generate-data-fns
+  "Macro for creating partial initialized versions of read!,
+   reset!, swap!, load!, and merge!. Useful if you're only using one
+   edn reader, and one GameObject as a source of truth.
+
+   read!, in this case, is actually a partial of cached-load!
+
+   * [name reader]
+     `name` : The name of the GameObject with the ArcadiaState
+     `reader` : An edn reader. Can be edn/read-string, or your
+     own custom reader."
+  [name reader]
+  `(let [name# ~name
+         reader# ~reader]
+     (~'def ~'load!  (partial load! reader#))
+     (~'def ~'read!  (partial cached-load! reader# name#))
+     (~'def ~'state! (partial state! name#))
+     (~'def ~'swat!  (partial swat! name#))
+     (~'def ~'merge! (partial merge! name#))
+     (~'defn ~'this [] (->state (the name#)))))
