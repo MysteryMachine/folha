@@ -15,7 +15,8 @@
     Mathf TextureFormat
     Texture2D    Color
     QueryTriggerInteraction
-    PlayerPrefs Application]
+    PlayerPrefs Application
+    UI.Text]
    ArcadiaState))
 
 ;; Logging
@@ -88,6 +89,18 @@
      (filter #(and (parent? % top-obj) (filter-fn %)) kids))))
 
 (defn ->name ^String [obj] (.name obj))
+
+(defn active!
+  "* [obj]
+     Toggles the activeness of a GameObject
+     - `obj` : A Unity GameObject
+   * [obj v]
+     Sets the activeness of a GameObject to `v`
+     - `v` : a boolean value"
+  ([obj]
+   (.SetActive obj (not (.activeSelf obj))))
+  ([obj v]
+   (.SetActive obj v)))
 
 ;; Greater of and Lesser of
 (defn <of [a b] (if (< a b) a b))
@@ -250,6 +263,18 @@
 (defn left-held   [] (Input/GetMouseButton     0))
 (defn left-up     [] (Input/GetMouseButtonUp   0))
 
+;; Canvas
+
+(defn text!
+  "* [o s]
+     Given a UnityObject, set the text of it, or its first child,
+     to a certain string.
+     - `o` : A UnityObject
+     - `s` : A string"
+  [o s]
+  (let [t (the* o Text)]
+    (set! (.text t) s)))
+
 ;; Screen
 
 (defn main-camera ^Camera [] (Camera/main))
@@ -336,12 +361,10 @@
 (defn clone!
   ([^GameObject obj]
    (let [go (GameObject/Instantiate obj)]
-     (set! (.name go) (.name obj))
-     (register-id! go)))
+     (set! (.name go) (.name obj))))
   ([^GameObject obj ^Vector3 pos ^Quaternion rot]
    (let [go (GameObject/Instantiate obj pos rot)]
-     (set! (.name go) (.name obj))
-     (register-id! go))))
+     (set! (.name go) (.name obj)))))
 
 (defn prefab!
   ([^String name] (clone! (Resources/Load name)))
@@ -385,7 +408,10 @@
   ([reader & ks]
    (into {}
          (for [k (flatten ks)]
-           [k (reader (PlayerPrefs/GetString (str k)))]))))
+           [k (let [pref (PlayerPrefs/GetString (str k))]
+                (if-not (empty? pref)
+                  (reader pref)
+                  nil))]))))
 
 (defn delete-pref
   "* [k]
