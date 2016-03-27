@@ -75,7 +75,25 @@
 (defn parent! [obj par]
   (set! (.parent (the obj Transform)) (the par Transform)))
 
+(defn child-components*
+  "* [name component]
+     Searches the direct children of a GameObject for a component.
+     Unlike Unity, does not return the GameObject's component.
+     - `name` : A UnityObject or a name one
+     - `component` : A Component"
+  [name component]
+  (let [obj (the name)
+        prelim (.GetComponentsInChildren obj component)]
+    (filter #(not= % obj) prelim)))
+
 (defn child-components
+  "* [name]
+   * [name component]
+     Searches the direct children of a GameObject for a component.
+     Unlike Unity, does not return the GameObject's component.
+     If `component` is not provided, defaults to transform.
+     - `name` : A UnityObject or a name one
+     - `component` : A Component"
   ([name] (child-components name Transform))
   ([name component]
    (let [obj (the name)
