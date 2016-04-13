@@ -17,7 +17,8 @@
     QueryTriggerInteraction
     PlayerPrefs Application
     UI.Text]
-   ArcadiaState))
+   ArcadiaState
+   UpdateHook))
 
 ;; Logging
 (defn log
@@ -551,6 +552,26 @@
          (add-component ~sym ArcadiaState))
        ~@(map (fn [hook] (hook-expand sym hook)) hooks))))
 
+(defn sync!
+  "* [data-obj syncing-obj action]
+     Given a source of truth, calls an update fn with the state of the
+     data-obj. This update fn should, from this state, sync up an obj.
+     * `data-obj` : an object with an ArcadiaState
+     * `syncing-obj` : the object that needs to sync with the data-obj
+     * `action` : A function that takes two args, a this (will be the syncing
+       object), and a state, which will be a piece of data from the data-obj
+   * [data-obj syncing-obj <cursor> action]
+     Like above, but takes a cursor. Calls action with the result of calling
+     get-in on the state of the data object with the cursor.
+     * `<cursor>` : a vector of keywords or numbers for reaching into a map"
+  ([data-obj syncing-obj action]
+   (sync! data-obj syncing-obj [] action))
+  ([data-obj syncing-obj <cursor> action]
+   (let [s (the syncing-obj)
+         d (the data-obj)]
+     (let [hook (add-component s UpdateHook)]
+      (set! (.fn hook) (fn [this] (action this (get-in (->state d) <cursor>))))))))
+
 (defmacro load-hooks
   "Deprecated, as of March 20, 2016, works, but is no longer
    part of the core design of folha
@@ -663,6 +684,7 @@
      (~'def ~'reset!! (partial reset!! name#))
      (~'def ~'swap!!  (partial swap!! name#))
      (~'def ~'merge! (partial merge! name#))
+     (~'def ~'sync! (partial sync! name#))
      (~'defn ~'this [] (->state (the name#)))))
 
 (defn- protocol-transform [pname api-fns]
