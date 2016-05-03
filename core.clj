@@ -28,6 +28,9 @@
   [msg]
   (Debug/Log (str msg)))
 
+(defmacro doc [sym]
+  `(-> (var ~sym) meta :doc println))
+
 ;; Accessing Objects
 (defn the
   "* [arg]
@@ -121,6 +124,10 @@
   ([obj v]
    (.SetActive obj v)))
 
+(defn destroy! [this]
+  (destroy (the this))
+  nil)
+
 ;; Greater of and Lesser of
 (defn <of [a b] (if (< a b) a b))
 (defn >of [a b] (if (> a b) a b))
@@ -129,6 +136,7 @@
 
 (defn sqrt [n] (Mathf/Sqrt n))
 (defn ceil [n] (Mathf/Ceil n))
+(defn logp [i p] (Mathf/Log (float i) (float p)))
 
 ;; Vector
 (defn v2 [x y] (Vector2. x y))
@@ -281,6 +289,11 @@
 (defn left-click  [] (Input/GetMouseButtonDown 0))
 (defn left-held   [] (Input/GetMouseButton     0))
 (defn left-up     [] (Input/GetMouseButtonUp   0))
+
+;; Keys
+
+(defn key? [k] (Input/GetKey k))
+(defn key-down? [k] (Input/GetKeyDown k))
 
 ;; Canvas
 
@@ -502,7 +515,7 @@
   (->state obj))
 
 (defmacro defhook
-  "[name [this state] & body]
+  "[name [this state & args] & body]
    Defines a function to be used as a hook for an object with
    an ArcadiaState component. The return value of this function
    will be the new state of the object.
@@ -510,11 +523,14 @@
    - `this` : The symbol to which the GameObject will be bound to
    - `state`: The symbol to which the GameObject's ArcadiaState.state
      will be bound to.
+   - `args` : Additional args are required by unity
    - `body` : The body of the function"
-  [name [this state] & body]
-  `(defn ~name [~this]
-     (let [~state (->state ~this)]
-       (reset!! ~this (do ~@body)))))
+
+  ([name [this state & args] & body]
+   `(defn ~name ~(into [this] args)
+      (let [~state (->state ~this)
+            result# (do ~@body)]
+        (when result# (reset!! ~this result#))))))
 
 (defn- hook-expand [prefab decl]
   (let [hook-name (first decl)
